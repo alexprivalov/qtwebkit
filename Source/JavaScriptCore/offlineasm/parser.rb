@@ -145,6 +145,15 @@ class Annotation
         @type = type
         @string = string
     end
+
+    # parseSequence tests "@tokens[@idx] =~ final" against whatever is at the cursor, and an
+    # Annotation can be there. This used to work by accident: Object#=~ answered nil for
+    # everything, so the test was simply false. Ruby deprecated that in 2.6 and removed it in
+    # 3.2, which turns the same line into a NoMethodError. Answer nil deliberately, which is
+    # what the parser has always relied on - an annotation is never a sequence terminator.
+    def =~(other)
+        nil
+    end
 end
 
 #

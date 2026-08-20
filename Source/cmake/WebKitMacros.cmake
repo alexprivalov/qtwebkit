@@ -225,7 +225,13 @@ endmacro()
 macro(WEBKIT_FRAMEWORK_TARGET _target)
     add_library(${_target}_PostBuild INTERFACE)
     target_link_libraries(${_target}_PostBuild INTERFACE ${${_target}_INTERFACE_LIBRARIES})
-    target_include_directories(${_target}_PostBuild INTERFACE ${${_target}_INTERFACE_INCLUDE_DIRECTORIES})
+    # Wrapped in BUILD_INTERFACE so install(EXPORT) accepts these targets. The raw paths point
+    # into the build tree, and install(EXPORT) rejects that with "INTERFACE_INCLUDE_DIRECTORIES
+    # property contains path: ... which is prefixed in the build directory". Installed consumers
+    # get their include dirs from the Qt5WebKitConfig package instead.
+    foreach (_dir ${${_target}_INTERFACE_INCLUDE_DIRECTORIES})
+        target_include_directories(${_target}_PostBuild INTERFACE $<BUILD_INTERFACE:${_dir}>)
+    endforeach ()
     add_dependencies(${_target}_PostBuild ${${_target}_INTERFACE_DEPENDENCIES})
     add_library(WebKit::${_target} ALIAS ${_target}_PostBuild)
 endmacro()

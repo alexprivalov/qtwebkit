@@ -491,3 +491,23 @@ if (APPLE)
         )
     endif ()
 endif ()
+
+if (ENABLE_WEBGL)
+    # WebGL here runs on Qt's own desktop OpenGL; ANGLE is present only as the shader
+    # translator behind ANGLEWebKitBridge. WebCore's link interface still names its targets, and
+    # install(EXPORT) refuses an export set that references a target outside it - the same
+    # reason qtsqlite and bmalloc are exported. Only the static path reaches this.
+    foreach (_angle_target ANGLE ANGLEFramework)
+        if (TARGET ${_angle_target})
+            QT_ADD_EXTRA_WEBKIT_TARGET_EXPORT(${_angle_target})
+        endif ()
+    endforeach ()
+
+    # ANGLEFramework advertises its headers by an absolute path inside the build tree, which
+    # install(EXPORT) rejects. Nothing outside this build needs them: the application consumes
+    # WebKit through the generated qmake .pri files and never includes an ANGLE header.
+    if (TARGET ANGLEFramework)
+        set_target_properties(ANGLEFramework PROPERTIES
+            INTERFACE_INCLUDE_DIRECTORIES "$<BUILD_INTERFACE:${ANGLE_FRAMEWORK_HEADERS_DIR}>")
+    endif ()
+endif ()

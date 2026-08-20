@@ -98,6 +98,15 @@ macro(QT_ADD_EXTRA_WEBKIT_TARGET_EXPORT target)
     if (QT_STATIC_BUILD OR SHARED_CORE)
         install(TARGETS ${target} EXPORT WebKitTargets
             DESTINATION "${LIB_INSTALL_DIR}")
+        # _WEBKIT_TARGET_INTERFACE creates a ${target}_PostBuild INTERFACE library carrying this
+        # target's usage requirements, which other targets link against. install(EXPORT) refuses
+        # an export set whose members reference a target outside it ("requires target
+        # X_PostBuild that is not in any export set"), so it has to be exported too. Only
+        # reachable on the static path, hence unnoticed upstream.
+        if (TARGET ${target}_PostBuild)
+            install(TARGETS ${target}_PostBuild EXPORT WebKitTargets
+                DESTINATION "${LIB_INSTALL_DIR}")
+        endif ()
     endif ()
 endmacro()
 

@@ -126,6 +126,8 @@ MediaPlayerPrivateQt::MediaPlayerPrivateQt(MediaPlayer* player)
     , m_currentSize(0, 0)
     , m_naturalSize(RenderVideo::defaultSize())
     , m_isSeeking(false)
+    , m_resumePlaybackAfterSeek(false)
+    , m_seekGeneration(0)
     , m_composited(false)
     , m_preload(MediaPlayer::Auto)
     , m_bytesLoadedAtLastDidLoadingProgress(0)
@@ -363,14 +365,56 @@ bool MediaPlayerPrivateQt::paused() const
 
 void MediaPlayerPrivateQt::seek(float position)
 {
-    if (!m_mediaPlayer->isSeekable())
+    // The element is already in its seeking state by the time we get here and stays there until
+    // timeChanged() reports back. A quiet return leaves it waiting forever, and after a few
+    // scrubs playback stops being reported at all - so every path below has to notify.
+    if (m_mediaPlayer->mediaStatus() == QMediaPlayer::NoMedia
+        || m_mediaPlayer->mediaStatus() == QMediaPlayer::UnknownMediaStatus) {
+        m_isSeeking = false;
+        m_webCorePlayer->timeChanged();
         return;
+    }
 
-    if (m_mediaPlayerControl && !m_mediaPlayerControl->availablePlaybackRanges().contains(position * 1000))
-        return;
-
+    // Neither isSeekable() nor availablePlaybackRanges() is consulted any more, and both used to
+    // return quietly. The backend reports media as not seekable while it sits stopped at the end
+    // of a clip - exactly when a viewer clicks the progress bar to watch it again - and seeking
+    // past the buffer is ordinary scrubbing, which the backend satisfies by fetching what it
+    // needs. Attempt the seek and let the backend answer.
+    if (!m_isSeeking)
+        m_resumePlaybackAfterSeek = m_mediaPlayer->state() == QMediaPlayer::PlayingState;
     m_isSeeking = true;
+    const unsigned generation = ++m_seekGeneration;
     m_mediaPlayer->setPosition(static_cast<qint64>(position * 1000));
+
+    // positionChanged() is the only signal that ends a seek, and the backend does not always
+    // send one: a seek landing where the clip already sits, or rapid back-and-forth scrubs that
+    // coalesce, produce none. Without a fallback m_isSeeking stays set and the element waits for
+    // a timeChanged() that never comes. The generation check stops a stale watchdog from ending
+    // a newer seek.
+    QTimer::singleShot(1500, this, [this, generation]() {
+        if (m_isSeeking && m_seekGeneration == generation)
+            finishSeek();
+    });
+}
+
+void MediaPlayerPrivateQt::finishSeek()
+{
+    const bool resumePlayback = m_resumePlaybackAfterSeek;
+    m_resumePlaybackAfterSeek = false;
+
+    // The Windows backend can stay in PlayingState with its presentation clock stalled after a
+    // backward seek, so restart it even when the state says it is already playing. m_isSeeking
+    // stays set through both calls, keeping those transitions invisible to the element.
+    if (resumePlayback) {
+        if (m_mediaPlayer->state() == QMediaPlayer::PlayingState)
+            m_mediaPlayer->pause();
+        m_mediaPlayer->play();
+    }
+
+    m_isSeeking = false;
+
+    // timeChanged() completes WebCore's seek and schedules its own play-state reconciliation.
+    m_webCorePlayer->timeChanged();
 }
 
 bool MediaPlayerPrivateQt::seeking() const
@@ -401,6 +445,19 @@ std::unique_ptr<PlatformTimeRanges> MediaPlayerPrivateQt::buffered() const
 {
     auto buffered = std::make_unique<PlatformTimeRanges>();
 
+    // Media served from the application's own scheme is fetched whole before playback starts,
+    // and for such a QIODevice source the backend reports no playback ranges at all. Left at
+    // that, the element believes nothing is buffered and never starts playing - metadata
+    // arrives, and then nothing. Report what is genuinely there instead.
+    if (!m_mediaBuffer.isNull()) {
+        const qint64 duration = m_mediaPlayer->duration();
+        if (duration > 0) {
+            buffered->add(MediaTime::zeroTime(),
+                          MediaTime::createWithFloat(static_cast<float>(duration) / 1000.0f));
+        }
+        return buffered;
+    }
+
     if (!m_mediaPlayerControl)
         return buffered;
 
@@ -418,6 +475,11 @@ std::unique_ptr<PlatformTimeRanges> MediaPlayerPrivateQt::buffered() const
 
 float MediaPlayerPrivateQt::maxTimeSeekable() const
 {
+    // Same reasoning as buffered(): the whole asset is in memory, so all of it is seekable,
+    // whatever the backend reports for a QIODevice source.
+    if (!m_mediaBuffer.isNull())
+        return static_cast<float>(m_mediaPlayer->duration()) / 1000.0f;
+
     if (!m_mediaPlayerControl)
         return 0;
 
@@ -526,11 +588,10 @@ void MediaPlayerPrivateQt::surfaceFormatChanged(const QVideoSurfaceFormat& forma
 
 void MediaPlayerPrivateQt::positionChanged(qint64)
 {
-    // Only propagate this event if we are seeking
-    if (m_isSeeking) {
-        m_isSeeking = false;
-        m_webCorePlayer->timeChanged();
-    }
+    // Only propagate this event if we are seeking. finishSeek() rather than clearing the flag
+    // here, so the signal and the watchdog end a seek by the same path.
+    if (m_isSeeking)
+        finishSeek();
 }
 
 void MediaPlayerPrivateQt::bufferStatusChanged(int)

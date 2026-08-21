@@ -135,6 +135,8 @@ private:
     // commitLoad's tail, reached either directly or once a custom-scheme fetch has finished.
     void startPlayback();
     void reportNetworkError();
+    // The single place a seek ends, reached from positionChanged() or from the watchdog.
+    void finishSeek();
 
     String engineDescription() const override { return "Qt"; }
 
@@ -155,6 +157,10 @@ private:
     IntSize m_naturalSize;
     bool m_isVisible;
     bool m_isSeeking;
+    // Whether playback was running when the current seek started, and which seek a pending
+    // watchdog belongs to - a stale one must not end a newer seek.
+    bool m_resumePlaybackAfterSeek;
+    unsigned m_seekGeneration;
     bool m_composited;
     MediaPlayer::Preload m_preload;
     mutable unsigned m_bytesLoadedAtLastDidLoadingProgress;

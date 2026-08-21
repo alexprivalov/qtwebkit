@@ -27,7 +27,10 @@
 #include <QObject>
 #include <QVideoSurfaceFormat>
 
+#include <QPointer>
+
 QT_BEGIN_NAMESPACE
+class QBuffer;
 class QMediaPlayerControl;
 class QGraphicsVideoItem;
 class QGraphicsScene;
@@ -129,6 +132,10 @@ private Q_SLOTS:
 private:
     void updateStates();
 
+    // commitLoad's tail, reached either directly or once a custom-scheme fetch has finished.
+    void startPlayback();
+    void reportNetworkError();
+
     String engineDescription() const override { return "Qt"; }
 
 private:
@@ -137,6 +144,9 @@ private:
     QMediaPlayerControl* m_mediaPlayerControl;
     QVideoSurfaceFormat m_frameFormat;
     QVideoFrame m_currentVideoFrame;
+    // Only set for a scheme QMediaPlayer cannot fetch itself. Held by QPointer because it is
+    // parented to this object and may be destroyed with it.
+    QPointer<QBuffer> m_mediaBuffer;
 
     mutable MediaPlayer::NetworkState m_networkState;
     mutable MediaPlayer::ReadyState m_readyState;

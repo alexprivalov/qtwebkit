@@ -31,9 +31,11 @@
 #include "NotImplemented.h"
 #include "RenderVideo.h"
 
+#include <QBuffer>
 #include <QMediaPlayerControl>
 #include <QMediaService>
 #include <QNetworkAccessManager>
+#include <QNetworkReply>
 #include <QNetworkCookie>
 #include <QNetworkCookieJar>
 #include <QNetworkRequest>
@@ -52,6 +54,26 @@
 #include "texmap/TextureMapper.h"
 
 using namespace WTF;
+
+// Wipes its payload on destruction. This covers only the copy we own: the QNetworkReply that
+// produced the bytes keeps its own buffer, and the platform media backend may take a further copy
+// of whatever it reads. Treat it as reducing the plaintext residue, not as removing it.
+class WipingMediaBuffer final : public QBuffer {
+public:
+    explicit WipingMediaBuffer(QObject* parent)
+        : QBuffer(parent)
+    {
+    }
+
+    ~WipingMediaBuffer() override
+    {
+        close();
+        QByteArray& bytes = buffer();
+        volatile char* data = bytes.data();
+        for (int i = 0; i < bytes.size(); ++i)
+            data[i] = 0;
+    }
+};
 
 namespace WebCore {
 
@@ -222,11 +244,68 @@ void MediaPlayerPrivateQt::commitLoad(const String& url)
         }
 
         m_mediaPlayer->setMedia(QMediaContent(request));
-    } else {
-        // Otherwise, just use the URL
-        m_mediaPlayer->setMedia(QMediaContent(rUrl));
+        startPlayback();
+        return;
     }
 
+    // Anything else - in practice the application's own scheme, serving media from inside a
+    // book. Handing such a URL to QMediaPlayer does nothing at all: the backend resolves it
+    // itself and knows nothing of the scheme, so the resource is never even requested. Fetch it
+    // through the frame's network stack, which does know, and give the player the bytes.
+    Document* document = m_webCorePlayer->client().mediaPlayerOwningDocument();
+    Frame* frame = document ? document->frame() : nullptr;
+    FrameLoader* frameLoader = frame ? &frame->loader() : nullptr;
+    QNetworkAccessManager* manager = frameLoader ? frameLoader->networkingContext()->networkAccessManager() : nullptr;
+    if (!manager) {
+        reportNetworkError();
+        return;
+    }
+
+    QNetworkReply* reply = manager->get(QNetworkRequest(rUrl));
+    QObject::connect(reply, &QNetworkReply::finished, this, [this, reply, rUrl]() {
+        if (reply->error() != QNetworkReply::NoError) {
+            reply->deleteLater();
+            reportNetworkError();
+            return;
+        }
+
+        // The whole asset is held in memory for the lifetime of the element. That is what buys
+        // seeking: a QNetworkReply is sequential, so handing it to the player directly would
+        // leave the scrubber dead. The cost is a contiguous allocation the size of the media in
+        // a 32-bit address space.
+        QByteArray payload = reply->readAll();
+        reply->deleteLater();
+
+        // Parented, so the wipe is guaranteed to run: deleteLater() alone would leave the buffer
+        // alive if nothing pumps the event loop again.
+        auto* mediaBuffer = new WipingMediaBuffer(this);
+        mediaBuffer->buffer().swap(payload);
+        if (!mediaBuffer->open(QIODevice::ReadOnly)) {
+            delete mediaBuffer;
+            reportNetworkError();
+            return;
+        }
+
+        m_mediaBuffer = mediaBuffer;
+        m_mediaPlayer->setMedia(QMediaContent(rUrl), mediaBuffer);
+        startPlayback();
+    });
+}
+
+void MediaPlayerPrivateQt::reportNetworkError()
+{
+    const MediaPlayer::NetworkState oldNetworkState = m_networkState;
+    const MediaPlayer::ReadyState oldReadyState = m_readyState;
+    m_networkState = MediaPlayer::NetworkError;
+    m_readyState = MediaPlayer::HaveNothing;
+    if (m_readyState != oldReadyState)
+        m_webCorePlayer->readyStateChanged();
+    if (m_networkState != oldNetworkState)
+        m_webCorePlayer->networkStateChanged();
+}
+
+void MediaPlayerPrivateQt::startPlayback()
+{
     // Set the current volume and mute status
     // We get these from the element, rather than the player, in case we have
     // transitioned from a media engine which doesn't support muting, to a media

@@ -259,11 +259,26 @@ if (QT_CORE_TYPE MATCHES STATIC)
     set(MACOS_BUILD_FRAMEWORKS OFF)
 endif ()
 
-# static icu libraries on windows are build with 's' prefix
-if (QT_STATIC_BUILD AND MSVC)
-    set(ICU_LIBRARY_PREFIX "s")
+# WebKitLegacy_LIBRARY_TYPE has to be decided here, not in WebKitLegacy/PlatformQt.cmake. That
+# file is included by WebKitLegacy/CMakeLists.txt one line *after* WEBKIT_FRAMEWORK_DECLARE has
+# already called add_library() with the then-empty variable, so WebKitLegacy comes out SHARED
+# even against a static Qt - a Qt5WebKit.dll, which defeats the point of a static build.
+if (QT_STATIC_BUILD)
+    set(WebKitLegacy_LIBRARY_TYPE STATIC)
 else ()
-    set(ICU_LIBRARY_PREFIX "")
+    set(WebKitLegacy_LIBRARY_TYPE SHARED)
+endif ()
+
+# Official static ICU on Windows is built with an 's' prefix (sicuuc.lib), which is what this
+# assumed unconditionally. vcpkg's static ICU is not: it ships icuuc.lib. Left overridable
+# rather than probed, because these are bare names handed to the linker via link_directories,
+# not paths that find_library could confirm - pass -DICU_LIBRARY_PREFIX= for vcpkg.
+if (NOT DEFINED ICU_LIBRARY_PREFIX)
+    if (QT_STATIC_BUILD AND MSVC)
+        set(ICU_LIBRARY_PREFIX "s")
+    else ()
+        set(ICU_LIBRARY_PREFIX "")
+    endif ()
 endif ()
 
 if (QT_STATIC_BUILD)
@@ -847,8 +862,18 @@ if (MSVC)
     # Use CRT security features
     add_definitions(-D_CRT_SECURE_NO_WARNINGS -D_CRT_SECURE_CPP_OVERLOAD_STANDARD_NAMES=1)
 
-    # Turn off certain link features
-    add_compile_options(/Gy- /openmp- /GF-)
+    # Turn off certain link features.
+    #
+    # /Gy- is deliberately not among them any more. It is what gives each function its own
+    # COMDAT, and without it /OPT:ICF has almost nothing to fold - the flag was cancelling
+    # itself out of any size-oriented build, and visibly so: cl reports
+    # "D9025: overriding '/Gy' with '/Gy-'", because add_compile_options lands after the
+    # configuration flags on the command line and therefore wins. Measured on the newer engine,
+    # same sources otherwise: 2,277,376 bytes off the reader.
+    #
+    # /GF- stays. Pooling identical string literals gives them one address, and code comparing
+    # literal addresses would change behaviour rather than size.
+    add_compile_options(/openmp- /GF-)
 
     # Turn off some linker warnings
     set(CMAKE_SHARED_LINKER_FLAGS "${CMAKE_SHARED_LINKER_FLAGS} /ignore:4049 /ignore:4217")

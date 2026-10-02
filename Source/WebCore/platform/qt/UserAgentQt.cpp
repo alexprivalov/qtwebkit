@@ -86,7 +86,7 @@ String UserAgentQt::standardUserAgent(const String &applicationNameForUserAgent,
 #elif OS(WINDOWS)
             windowsVersionForUAString().latin1().data()
 #elif OS(MAC_OS_X)
-#if CPU(X86) || CPU(X86_64)
+#if CPU(X86) || CPU(X86_64) || CPU(ARM64)
             "Intel Mac OS X"
 #else
             "PPC Mac OS X"

@@ -753,7 +753,7 @@
 #endif
 
 #if CPU(ADDRESS64)
-#if OS(DARWIN) && CPU(ARM64)
+#if OS(IOS_FAMILY) && CPU(ARM64)
 #define WTF_CPU_EFFECTIVE_ADDRESS_WIDTH 36
 #else
 /* We strongly assume that effective address width is <= 48 in 64bit architectures (e.g. NaN boxing). */

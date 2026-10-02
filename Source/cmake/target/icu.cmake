@@ -3,10 +3,16 @@
 if (APPLE)
     set(ICU_INCLUDE_DIRS ${CMAKE_BINARY_DIR}/ICU/Headers)
 
-    # Apple just has a single dylib for ICU
-    set(ICU_I18N_LIBRARY /usr/lib/libicucore.dylib)
-    set(ICU_UC_LIBRARY /usr/lib/libicucore.dylib)
-    set(ICU_DATA_LIBRARY /usr/lib/libicucore.dylib)
+    # Apple just has a single dylib for ICU. Since macOS 11 it lives only in the dyld shared
+    # cache, so link the SDK's text stub; the runtime path is /usr/lib/libicucore.A.dylib either way.
+    if (EXISTS "${CMAKE_OSX_SYSROOT}/usr/lib/libicucore.tbd")
+        set(_icucore "${CMAKE_OSX_SYSROOT}/usr/lib/libicucore.tbd")
+    else ()
+        set(_icucore /usr/lib/libicucore.dylib)
+    endif ()
+    set(ICU_I18N_LIBRARY ${_icucore})
+    set(ICU_UC_LIBRARY ${_icucore})
+    set(ICU_DATA_LIBRARY ${_icucore})
 
     set(ICU_LIBRARIES ${ICU_UC_LIBRARY})
 elseif (WIN32 AND NOT WTF_PLATFORM_WIN_CAIRO)

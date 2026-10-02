@@ -495,8 +495,12 @@ void GraphicsContext3D::getShaderPrecisionFormat(GC3Denum shaderType, GC3Denum p
     makeContextCurrent();
 
 #if PLATFORM(QT)
-    m_functions->glGetShaderPrecisionFormat(shaderType, precisionType, range, precision);
-    return;
+    // Desktop GL below 4.1 has no glGetShaderPrecisionFormat (GL_INVALID_OPERATION, outputs
+    // untouched); it gets the IEEE values below, as on the other desktop ports.
+    if (isGLES2Compliant()) {
+        m_functions->glGetShaderPrecisionFormat(shaderType, precisionType, range, precision);
+        return;
+    }
 #endif
 
     switch (precisionType) {

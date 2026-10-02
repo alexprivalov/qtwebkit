@@ -741,6 +741,12 @@ endif ()
 
 list(APPEND WebKitWidgets_Private_PRI_ARGUMENTS MODULE_CONFIG "internal_module no_link")
 
+# QtWebKit's .pri is marked staticlib because it carries the static EXTRA_LIBS; widgets has none,
+# so say it explicitly or qmake links -lQt5WebKitWidgets as a dylib.
+if (QT_STATIC_BUILD AND NOT MACOS_BUILD_FRAMEWORKS)
+    list(APPEND WebKitWidgets_PRI_ARGUMENTS MODULE_CONFIG "staticlib")
+endif ()
+
 if (MACOS_BUILD_FRAMEWORKS)
     set(WebKitWidgets_OUTPUT_NAME QtWebKitWidgets)
 else ()

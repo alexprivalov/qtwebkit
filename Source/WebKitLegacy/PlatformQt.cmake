@@ -413,6 +413,9 @@ if (QT_STATIC_BUILD)
         list(APPEND EXTRA_LIBS_NAMES icucore)
     endif ()
     list(REMOVE_DUPLICATES EXTRA_LIBS_NAMES)
+    # qmake links Qt's own libraries by full path, so nothing else puts the Qt lib directory on
+    # the search path for these. $$QT_MODULE_LIB_BASE keeps the installed tree relocatable.
+    set(WEBKIT_PRI_EXTRA_LIBS "-L$$QT_MODULE_LIB_BASE")
     foreach (LIB_NAME ${EXTRA_LIBS_NAMES})
         set(WEBKIT_PKGCONFIG_DEPS "${WEBKIT_PKGCONFIG_DEPS} ${LIB_PREFIX}${LIB_NAME}")
         set(WEBKIT_PRI_EXTRA_LIBS "${WEBKIT_PRI_EXTRA_LIBS} -l${LIB_PREFIX}${LIB_NAME}")

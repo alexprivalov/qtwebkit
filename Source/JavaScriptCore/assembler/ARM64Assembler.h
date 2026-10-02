@@ -37,6 +37,10 @@
 #include <wtf/Vector.h>
 #include <stdint.h>
 
+#if OS(DARWIN)
+#include <libkern/OSCacheControl.h>
+#endif
+
 #if OS(FUCHSIA)
 #include <zircon/syscalls.h>
 #endif
@@ -2807,7 +2811,7 @@ public:
 
     static void cacheFlush(void* code, size_t size)
     {
-#if OS(IOS_FAMILY)
+#if OS(DARWIN)
         sys_cache_control(kCacheFunctionPrepareForExecution, code, size);
 #elif OS(FUCHSIA)
         zx_cache_flush(code, size, ZX_CACHE_FLUSH_INSN);

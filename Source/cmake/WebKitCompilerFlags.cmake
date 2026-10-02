@@ -127,6 +127,11 @@ if (COMPILER_IS_GCC_OR_CLANG)
                                          -Wno-parentheses-equality
                                          -Wno-psabi)
 
+    # Clang 19 made this an error by default; JSC's "template is" idiom predates it.
+    if (CMAKE_CXX_COMPILER_ID MATCHES "Clang")
+        WEBKIT_PREPEND_GLOBAL_CXX_FLAGS(-Wno-missing-template-arg-list-after-template-kw)
+    endif ()
+
     # https://gcc.gnu.org/bugzilla/show_bug.cgi?id=80947
     if (${CMAKE_CXX_COMPILER_VERSION} VERSION_LESS "8.0" AND NOT CMAKE_CXX_COMPILER_ID MATCHES "Clang")
         WEBKIT_PREPEND_GLOBAL_CXX_FLAGS(-Wno-attributes)

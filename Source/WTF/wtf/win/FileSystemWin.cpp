@@ -278,7 +278,8 @@ String pathByAppendingComponents(StringView path, const Vector<StringView>& comp
 CString fileSystemRepresentation(const String& path)
 {
     auto characters = wcharFrom(StringView(path).upconvertedCharacters());
-    int size = WideCharToMultiByte(CP_ACP, 0, characters, path.length(), 0, 0, 0, 0) - 1;
+    // With an explicit length the result has no terminator and the size does not count one.
+    int size = WideCharToMultiByte(CP_ACP, 0, characters, path.length(), 0, 0, 0, 0);
 
     char* buffer;
     CString string = CString::newUninitialized(size, buffer);

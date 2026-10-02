@@ -10,6 +10,12 @@ list(REMOVE_ITEM WebCore_SOURCES
 
 set(WebCore_OUTPUT_NAME WebCore)
 
+# lib.exe cannot write a static library over 4 GB (LNK1248), and WebCore compiled /GL - LTCG
+# intermediate code instead of machine code - is larger than that. Its machine code is ~540 MB.
+if (MSVC)
+    target_compile_options(WebCore PRIVATE /GL-)
+endif ()
+
 if (NOT USE_LIBJPEG)
     list(REMOVE_ITEM WebCore_SOURCES
         platform/image-decoders/jpeg/JPEGImageDecoder.cpp

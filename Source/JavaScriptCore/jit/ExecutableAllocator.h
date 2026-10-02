@@ -49,6 +49,10 @@
 #include <sys/cachectl.h>
 #endif
 
+#if OS(MAC_OS_X) && CPU(ARM64)
+#include <pthread.h>
+#endif
+
 #if ENABLE(FAST_JIT_PERMISSIONS)
 #include <os/thread_self_restrict.h> 
 #endif
@@ -128,6 +132,15 @@ static ALWAYS_INLINE void* performJITMemcpy(void *dst, const void *src, size_t n
 
         if (UNLIKELY(Options::dumpJITMemoryPath()))
             dumpJITMemory(dst, src, n);
+#if OS(MAC_OS_X) && CPU(ARM64)
+        // Apple silicon keeps MAP_JIT memory execute-only per thread; writing needs the
+        // thread switched to writable for the copy and back to executable afterwards.
+        pthread_jit_write_protect_np(false);
+        memcpy(dst, src, n);
+        pthread_jit_write_protect_np(true);
+        return dst;
+#endif
+
 #if ENABLE(FAST_JIT_PERMISSIONS)
 #if ENABLE(SEPARATED_WX_HEAP)
         if (g_jscConfig.useFastPermisionsJITCopy)

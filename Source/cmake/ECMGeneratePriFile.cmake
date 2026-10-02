@@ -215,6 +215,17 @@ function(ECM_GENERATE_PRI_FILE)
       set(PRI_TARGET_NAME ${PRI_TARGET_LIBNAME})
   endif ()
 
+  # Static dependencies go through QT.<module>.uses: qmake evaluates every qt_lib_*.pri it finds,
+  # so a bare QMAKE_LIBS_PRIVATE here would land on projects that never use this module.
+  string(STRIP "${PRI_TARGET_EXTRA_LIBS}" PRI_TARGET_EXTRA_LIBS)
+  if (PRI_TARGET_EXTRA_LIBS)
+      string(TOUPPER "${PRI_TARGET_BASENAME}" _pri_upper)
+      set(PRI_TARGET_USES "QT.${PRI_TARGET_BASENAME}.uses = ${PRI_TARGET_BASENAME}_static_deps
+QMAKE_LIBS_${_pri_upper}_STATIC_DEPS = ${PRI_TARGET_EXTRA_LIBS}")
+  else ()
+      set(PRI_TARGET_USES "")
+  endif ()
+
   file(GENERATE
      OUTPUT ${PRI_FILENAME}
      CONTENT
@@ -239,7 +250,7 @@ QT.${PRI_TARGET_BASENAME}.qml =
 QT.${PRI_TARGET_BASENAME}.frameworks = ${PRI_TARGET_FRAMEWORKS}
 QT.${PRI_TARGET_BASENAME}.module_config = v2 ${PRI_TARGET_CONFIG}
 QT_MODULES += ${PRI_TARGET_QT_MODULES}
-QMAKE_LIBS_PRIVATE += ${PRI_TARGET_EXTRA_LIBS}
+${PRI_TARGET_USES}
 QMAKE_RPATHDIR += ${PRI_TARGET_RPATH}
 "
   )

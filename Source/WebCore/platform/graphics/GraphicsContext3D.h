@@ -763,6 +763,9 @@ public:
     enum RenderStyle {
         RenderOffscreen,
         RenderDirectlyToHostWindow,
+#if PLATFORM(QT)
+        RenderToCurrentGLContext,
+#endif
     };
 
     class ContextLostCallback {
@@ -1476,6 +1479,7 @@ private:
     std::unique_ptr<Extensions3DOpenGLCommon> m_extensions;
     friend class Extensions3DOpenGL;
     friend class Extensions3DOpenGLES;
+    friend class Extensions3DOpenGLCommon;
 #elif  !PLATFORM(COCOA) && USE(OPENGL_ES)
     friend class Extensions3DOpenGLES;
     friend class Extensions3DOpenGLCommon;
@@ -1571,7 +1575,7 @@ private:
 #if USE(NICOSIA) && USE(TEXTURE_MAPPER)
     friend class Nicosia::GC3DLayer;
     std::unique_ptr<Nicosia::GC3DLayer> m_nicosiaLayer;
-#elif USE(TEXTURE_MAPPER)
+#elif USE(TEXTURE_MAPPER) && !PLATFORM(QT)
     friend class TextureMapperGC3DPlatformLayer;
     std::unique_ptr<TextureMapperGC3DPlatformLayer> m_texmapLayer;
 #else

@@ -35,7 +35,7 @@
 #include "OpenGLShims.h"
 #elif USE(OPENGL_ES)
 #include <OpenGLES/ES2/glext.h>
-#elif USE(OPENGL)
+#elif USE(OPENGL) && !PLATFORM(QT)
 #include <OpenGL/gl.h>
 #elif PLATFORM(QT)
 #define FUNCTIONS m_context->m_functions

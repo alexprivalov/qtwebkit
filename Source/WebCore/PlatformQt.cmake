@@ -1,6 +1,13 @@
 include(platform/ImageDecoders.cmake)
 include(platform/TextureMapper.cmake)
 
+# GraphicsContext3DQt.cpp implements GraphicsContext3D for this port; these two are the
+# GLib/Nicosia (epoxy, GLContext) implementations of the same thing.
+list(REMOVE_ITEM WebCore_SOURCES
+    platform/graphics/texmap/GraphicsContext3DTextureMapper.cpp
+    platform/graphics/texmap/TextureMapperGC3DPlatformLayer.cpp
+)
+
 set(WebCore_OUTPUT_NAME WebCore)
 
 if (NOT USE_LIBJPEG)

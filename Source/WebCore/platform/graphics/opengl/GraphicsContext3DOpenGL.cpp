@@ -59,7 +59,7 @@
 // From <OpenGLES/glext.h>
 #define GL_RGBA32F_ARB                      0x8814
 #define GL_RGB32F_ARB                       0x8815
-#elif USE(OPENGL)
+#elif USE(OPENGL) && !PLATFORM(QT)
 #define GL_DO_NOT_WARN_IF_MULTI_GL_VERSION_HEADERS_INCLUDED
 #include <OpenGL/gl.h>
 #include <OpenGL/gl3.h>

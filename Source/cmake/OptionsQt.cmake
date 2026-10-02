@@ -560,7 +560,11 @@ if (ENABLE_OPENGL)
        message(FATAL_ERROR "Qt with OpenGL support is required for ENABLE_OPENGL")
     endif ()
 
-    SET_AND_EXPOSE_TO_BUILD(USE_TEXTURE_MAPPER_GL TRUE)
+    # USE_TEXTURE_MAPPER_GL is deliberately off (Platform.h would turn it on): the shared texmap
+    # GL code (BitmapTextureGL, TextureMapperGL) was written for the Cairo ports and no longer
+    # builds against this port's types. WebGL does not need it - with no GL compositor the canvas is painted from a
+    # framebuffer readback, see GraphicsContext3DQt.cpp.
+    SET_AND_EXPOSE_TO_BUILD(USE_TEXTURE_MAPPER_GL FALSE)
     SET_AND_EXPOSE_TO_BUILD(ENABLE_GRAPHICS_CONTEXT_3D TRUE)
 
     if (WIN32)
@@ -578,6 +582,13 @@ if (ENABLE_OPENGL)
     message(STATUS "Qt OpenGL implementation: ${Qt5Gui_OPENGL_IMPLEMENTATION}")
     message(STATUS "Qt OpenGL libraries: ${Qt5Gui_OPENGL_LIBRARIES}")
     message(STATUS "Qt EGL libraries: ${Qt5Gui_EGL_LIBRARIES}")
+
+    # The shared opengl/ GraphicsContext3D code is compiled only under one of these.
+    if (${Qt5Gui_OPENGL_IMPLEMENTATION} STREQUAL GLESv2)
+        SET_AND_EXPOSE_TO_BUILD(USE_OPENGL_ES TRUE)
+    else ()
+        SET_AND_EXPOSE_TO_BUILD(USE_OPENGL TRUE)
+    endif ()
 endif ()
 
 if (ENABLE_PRINT_SUPPORT)

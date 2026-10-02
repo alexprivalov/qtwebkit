@@ -67,12 +67,18 @@ typedef char GLchar;
 #define GL_DRAW_FRAMEBUFFER               0x8CA9
 #endif
 
-class GraphicsContext3DPrivate final : public TextureMapperPlatformLayer, public QOpenGLExtensions {
+class GraphicsContext3DPrivate final :
+#if USE(TEXTURE_MAPPER_GL)
+    public TextureMapperPlatformLayer,
+#endif
+    public QOpenGLExtensions {
 public:
     GraphicsContext3DPrivate(GraphicsContext3D*, HostWindow*, GraphicsContext3D::RenderStyle);
     ~GraphicsContext3DPrivate();
 
+#if USE(TEXTURE_MAPPER_GL)
     void paintToTextureMapper(TextureMapper&, const FloatRect& target, const TransformationMatrix&, float opacity) final;
+#endif
 #if USE(GRAPHICS_SURFACE)
     IntSize platformLayerSize() const final;
     uint32_t copyToGraphicsSurface() final;
@@ -232,7 +238,7 @@ void GraphicsContext3DPrivate::createOffscreenBuffers()
 void GraphicsContext3DPrivate::initializeANGLE()
 {
     ShBuiltInResources ANGLEResources;
-    ShInitBuiltInResources(&ANGLEResources);
+    sh::InitBuiltInResources(&ANGLEResources);
 
     m_context->getIntegerv(GraphicsContext3D::MAX_VERTEX_ATTRIBS, &ANGLEResources.MaxVertexAttribs);
     m_context->getIntegerv(GraphicsContext3D::MAX_VERTEX_UNIFORM_VECTORS, &ANGLEResources.MaxVertexUniformVectors);
@@ -245,8 +251,8 @@ void GraphicsContext3DPrivate::initializeANGLE()
     // Always set to 1 for OpenGL ES.
     ANGLEResources.MaxDrawBuffers = 1;
 
-    Extensions3D* extensions = m_context->getExtensions();
-    if (extensions->supports("GL_ARB_texture_rectangle"))
+    Extensions3D& extensions = m_context->getExtensions();
+    if (extensions.supports("GL_ARB_texture_rectangle"))
         ANGLEResources.ARB_texture_rectangle = 1;
 
     GC3Dint range[2], precision;
@@ -265,6 +271,7 @@ GraphicsContext3DPrivate::~GraphicsContext3DPrivate()
     m_platformContextWatcher = 0;
 }
 
+#if USE(TEXTURE_MAPPER_GL)
 void GraphicsContext3DPrivate::paintToTextureMapper(TextureMapper& textureMapper, const FloatRect& targetRect, const TransformationMatrix& matrix, float opacity)
 {
     m_context->markLayerComposited();
@@ -299,6 +306,8 @@ void GraphicsContext3DPrivate::paintToTextureMapper(TextureMapper& textureMapper
     painter->drawImage(targetRect, offscreenImage);
     painter->restore();
 }
+
+#endif
 
 #if USE(GRAPHICS_SURFACE)
 IntSize GraphicsContext3DPrivate::platformLayerSize() const
@@ -384,35 +393,21 @@ void GraphicsContext3DPrivate::createGraphicsSurfaces(const IntSize& size)
 #endif
 }
 
-RefPtr<GraphicsContext3D> GraphicsContext3D::create(GraphicsContext3D::Attributes attrs, HostWindow* hostWindow, GraphicsContext3D::RenderStyle renderStyle)
+RefPtr<GraphicsContext3D> GraphicsContext3D::create(GraphicsContext3DAttributes attrs, HostWindow* hostWindow, GraphicsContext3D::RenderStyle renderStyle)
 {
     // This implementation doesn't currently support rendering directly to the HostWindow.
     if (renderStyle == RenderDirectlyToHostWindow)
         return 0;
     RefPtr<GraphicsContext3D> context = adoptRef(new GraphicsContext3D(attrs, hostWindow, renderStyle));
-    return context->m_private ? context.release() : 0;
+    return context->m_private ? context : nullptr;
 }
 
-GraphicsContext3D::GraphicsContext3D(GraphicsContext3D::Attributes attrs, HostWindow* hostWindow, GraphicsContext3D::RenderStyle renderStyle)
-    : m_currentWidth(0)
-    , m_currentHeight(0)
-    , m_attrs(attrs)
+GraphicsContext3D::GraphicsContext3D(GraphicsContext3DAttributes attrs, HostWindow* hostWindow, GraphicsContext3D::RenderStyle renderStyle, GraphicsContext3D*)
+    : m_attrs(attrs)
     , m_renderStyle(renderStyle)
-    , m_texture(0)
-    , m_compositorTexture(0)
-    , m_fbo(0)
-    , m_depthBuffer(0)
-    , m_stencilBuffer(0)
-    , m_depthStencilBuffer(0)
-    , m_layerComposited(false)
-    , m_internalColorFormat(0)
-    , m_multisampleFBO(0)
-    , m_multisampleDepthStencilBuffer(0)
-    , m_multisampleColorBuffer(0)
     , m_functions(0)
     , m_private(std::make_unique<GraphicsContext3DPrivate>(this, hostWindow, renderStyle))
-    , m_compiler(isGLES2Compliant() ? SH_ESSL_OUTPUT : SH_GLSL_OUTPUT)
-    , m_webglContext(nullptr)
+    , m_compiler(isGLES2Compliant() ? SH_ESSL_OUTPUT : SH_GLSL_COMPATIBILITY_OUTPUT)
 {
     if (!m_private->m_surface || !m_private->m_platformContext) {
         LOG_ERROR("GraphicsContext3D: GL context creation failed.");
@@ -482,7 +477,12 @@ Platform3DObject GraphicsContext3D::platformTexture() const
 
 PlatformLayer* GraphicsContext3D::platformLayer() const
 {
+#if USE(TEXTURE_MAPPER_GL)
     return m_private.get();
+#else
+    // No GL compositor: the canvas stays uncomposited and paints by readback.
+    return nullptr;
+#endif
 }
 
 bool GraphicsContext3D::makeContextCurrent()
@@ -493,10 +493,13 @@ bool GraphicsContext3D::makeContextCurrent()
 }
 
 // Simplify GraphicsContext3D::paintToCanvas() r228052
-void GraphicsContext3D::paintToCanvas(const unsigned char* imagePixels, int imageWidth, int imageHeight,
-                                      int canvasWidth, int canvasHeight, QPainter* context)
+void GraphicsContext3D::paintToCanvas(const unsigned char* imagePixels, const IntSize& imageSize, const IntSize& canvasSize, GraphicsContext& graphicsContext)
 {
-    QImage image(imagePixels, imageWidth, imageHeight, NativeImageQt::defaultFormatForAlphaEnabledImages());
+    const int imageHeight = imageSize.height();
+    const int canvasWidth = canvasSize.width();
+    const int canvasHeight = canvasSize.height();
+    QPainter* context = graphicsContext.platformContext();
+    QImage image(imagePixels, imageSize.width(), imageHeight, NativeImageQt::defaultFormatForAlphaEnabledImages());
     context->save();
     context->translate(0, imageHeight);
     context->scale(1, -1);
@@ -526,12 +529,9 @@ bool GraphicsContext3D::ImageExtractor::extractImage(bool premultiplyAlpha, bool
     if (m_image->data())
         m_qtImage = QImage::fromData(reinterpret_cast<const uchar*>(m_image->data()->data()), m_image->data()->size());
     else {
-        QPixmap* nativePixmap = m_image->nativeImageForCurrentFrame();
-        if (!nativePixmap)
+        m_qtImage = m_image->nativeImageForCurrentFrame();
+        if (m_qtImage.isNull())
             return false;
-
-        // With QPA, we can avoid a deep copy.
-        m_qtImage = *nativePixmap->handle()->buffer();
     }
 
     m_alphaOp = AlphaDoNothing;
@@ -564,7 +564,7 @@ bool GraphicsContext3D::ImageExtractor::extractImage(bool premultiplyAlpha, bool
     return true;
 }
 
-void GraphicsContext3D::checkGPUStatusIfNecessary()
+void GraphicsContext3D::checkGPUStatus()
 {
 }
 

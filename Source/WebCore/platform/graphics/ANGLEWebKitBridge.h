@@ -54,6 +54,9 @@
 #error Unsupported configuration
 #endif
 
+#elif PLATFORM(QT)
+// <qopengl.h> already included above.
+
 #elif PLATFORM(WIN)
 #include "OpenGLESShims.h"
 

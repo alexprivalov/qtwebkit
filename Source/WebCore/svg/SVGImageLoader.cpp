@@ -41,8 +41,11 @@ void SVGImageLoader::dispatchLoadEvent()
     if (image()->errorOccurred())
         element().dispatchEvent(Event::create(eventNames().errorEvent, Event::CanBubble::No, Event::IsCancelable::No));
     else {
-        if (downcast<SVGImageElement>(element()).externalResourcesRequired())
-            downcast<SVGImageElement>(ImageLoader::element()).sendSVGLoadEventIfPossible(true);
+        auto& imageElement = downcast<SVGImageElement>(ImageLoader::element());
+        if (imageElement.externalResourcesRequired())
+            imageElement.sendSVGLoadEventIfPossible(true);
+        else
+            imageElement.dispatchEvent(Event::create(eventNames().loadEvent, Event::CanBubble::No, Event::IsCancelable::No));
     }
 }
 

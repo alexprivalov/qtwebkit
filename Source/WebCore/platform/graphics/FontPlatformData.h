@@ -106,8 +106,11 @@ public:
 
 #if PLATFORM(QT)
     FontPlatformData(const FontDescription&, const AtomString& family);
+    // Web fonts arrive here. Font::platformInit and platformWidthForGlyph treat a zero size as
+    // an empty font, so without m_size every @font-face font laid out at zero width.
     FontPlatformData(const QRawFont& rawFont)
         : m_data(adoptRef(new FontPlatformDataPrivate(rawFont)))
+        , m_size(rawFont.pixelSize())
     { }
 #endif
 

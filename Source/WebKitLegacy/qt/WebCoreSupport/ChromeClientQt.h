@@ -32,6 +32,7 @@
 #include <WebCore/ChromeClient.h>
 #include <WebCore/FloatRect.h>
 #include <WebCore/MediaProducer.h>
+#include <WebCore/Timer.h>
 #include "QtPlatformPlugin.h"
 #include <wtf/RefCounted.h>
 #include <wtf/URL.h>
@@ -220,6 +221,11 @@ public:
     bool menuBarVisible;
     QEventLoop* m_eventLoop;
     MediaProducer::MediaStateFlags m_mediaState { WebCore::MediaProducer::IsNotPlaying };
+
+    // Nothing else in the Qt port calls Page::updateRendering, which services rAF callbacks
+    // and Web Animations; without it both stay frozen.
+    void renderingUpdateTimerFired();
+    Timer m_renderingUpdateTimer { *this, &ChromeClientQt::renderingUpdateTimerFired };
 
 #if ENABLE(VIDEO) && (USE(GSTREAMER) || USE(QT_MULTIMEDIA))
     FullScreenVideoQt* m_fullScreenVideo;

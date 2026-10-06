@@ -593,8 +593,15 @@ void ChromeClientQt::setNeedsOneShotDrawingSynchronization()
 #endif
 }
 
+void ChromeClientQt::renderingUpdateTimerFired()
+{
+    m_webPage->page->updateRendering();
+}
+
 void ChromeClientQt::scheduleCompositingLayerFlush()
 {
+    if (!m_renderingUpdateTimer.isActive())
+        m_renderingUpdateTimer.startOneShot(0_s);
 #if USE(TEXTURE_MAPPER)
     // we want the layers to synchronize ASAP
     if (m_textureMapperLayerClient)
